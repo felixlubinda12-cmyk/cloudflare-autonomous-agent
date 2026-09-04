@@ -98,6 +98,8 @@ export default {
 
       // Check Secrets Configuration (existence without exposing values)
       services.gemini = env.GEMINI_API_KEY ? 'configured' : 'missing';
+      services.gemini_fallback = env.GEMINI_FALLBACK_API_KEY ? 'configured' : 'optional_not_set';
+      services.github_playground = (env.GITHUB_TOKEN && env.GITHUB_OWNER && env.GITHUB_REPOSITORY) ? 'configured' : 'optional_not_set';
       services.cloudflare = env.CLOUDFLARE_API_TOKEN ? 'configured' : 'missing';
       services.telegram = env.TELEGRAM_BOT_TOKEN ? 'configured' : 'missing';
       services.webhook_secret = env.TELEGRAM_WEBHOOK_SECRET ? 'configured' : 'missing';

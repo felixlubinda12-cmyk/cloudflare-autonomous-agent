@@ -13,17 +13,20 @@ export class ContextBuilder {
   private memory: MemoryService;
   private accountId: string;
   private maxIterations: number;
+  private githubRepo?: string;
 
   constructor(
     sessions: SessionService,
     memory: MemoryService,
     accountId: string,
-    maxIterations: number = 8
+    maxIterations: number = 8,
+    githubRepo?: string
   ) {
     this.sessions = sessions;
     this.memory = memory;
     this.accountId = accountId;
     this.maxIterations = maxIterations;
+    this.githubRepo = githubRepo;
   }
 
   /**
@@ -36,6 +39,7 @@ export class ContextBuilder {
     const baseSystemPrompt = buildSystemPrompt({
       accountId: this.accountId,
       maxIterations: this.maxIterations,
+      githubRepo: this.githubRepo,
     });
 
     // 1. Retrieve persistent memories

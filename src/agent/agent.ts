@@ -8,6 +8,7 @@ import { R2Service } from '../storage/r2.js';
 import { D1Service } from '../storage/d1.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { ToolExecutionContext } from '../tools/types.js';
+import { GitHubService } from '../github/client.js';
 import { ContextBuilder } from './context.js';
 import { AgentLoop } from './loop.js';
 import { Logger } from '../logging/logger.js';
@@ -16,6 +17,7 @@ export class AgentService {
   private sessions: SessionService;
   private memory: MemoryService;
   private cloudflare: CloudflareService;
+  private github?: GitHubService;
   private kv: KvService;
   private r2: R2Service;
   private d1: D1Service;
@@ -33,12 +35,14 @@ export class AgentService {
     r2: R2Service;
     d1: D1Service;
     accountId: string;
+    github?: GitHubService;
     maxIterations?: number;
     logger?: Logger;
   }) {
     this.sessions = params.sessions;
     this.memory = params.memory;
     this.cloudflare = params.cloudflare;
+    this.github = params.github;
     this.kv = params.kv;
     this.r2 = params.r2;
     this.d1 = params.d1;
@@ -46,11 +50,16 @@ export class AgentService {
 
     this.tools = new ToolRegistry();
     const maxIterations = params.maxIterations || 8;
+    const targetRepo = params.github?.isConfigured()
+      ? `${params.github.getTargetRepository().owner}/${params.github.getTargetRepository().repo}`
+      : undefined;
+
     this.contextBuilder = new ContextBuilder(
       this.sessions,
       this.memory,
       params.accountId,
-      maxIterations
+      maxIterations,
+      targetRepo
     );
     this.agentLoop = new AgentLoop(
       params.gemini,
@@ -87,6 +96,7 @@ export class AgentService {
       r2: this.r2,
       kv: this.kv,
       sessionId: session.id,
+      github: this.github,
     };
 
     // 4. Run agent loop

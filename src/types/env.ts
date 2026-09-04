@@ -13,6 +13,12 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
 
+  // Phase 2: Fallback & GitHub Secrets
+  GEMINI_FALLBACK_API_KEY?: string;
+  GITHUB_TOKEN?: string;
+  GITHUB_OWNER?: string;
+  GITHUB_REPOSITORY?: string;
+
   // Configuration / Optional variables
   CLOUDFLARE_ACCOUNT_ID?: string;
   TELEGRAM_OWNER_ID?: string;
@@ -35,4 +41,9 @@ export interface AppConfig {
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   environment: 'development' | 'production' | 'test';
   adminSecret?: string;
+  // Phase 2: Fallback & GitHub
+  geminiFallbackApiKey?: string;
+  githubToken?: string;
+  githubOwner?: string;
+  githubRepository?: string;
 }

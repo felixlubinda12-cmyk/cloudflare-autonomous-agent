@@ -12,22 +12,33 @@ export class GeminiApiError extends Error {
 
 export class GeminiService {
   private apiKey: string;
+  private fallbackApiKey?: string;
   private model: string;
   private redactor: SecretRedactor;
 
   constructor(
     apiKey: string,
     model: string = 'gemini-3.8-flash',
-    redactor?: SecretRedactor
+    redactor?: SecretRedactor,
+    fallbackApiKey?: string
   ) {
     this.apiKey = apiKey.trim();
     this.model = model.trim();
-    this.redactor = redactor || new SecretRedactor([apiKey]);
+    this.fallbackApiKey = fallbackApiKey?.trim() || undefined;
+    this.redactor = redactor || new SecretRedactor([this.apiKey, this.fallbackApiKey]);
     this.redactor.addSecret(this.apiKey);
+    if (this.fallbackApiKey) {
+      this.redactor.addSecret(this.fallbackApiKey);
+    }
+  }
+
+  public getHasFallbackKey(): boolean {
+    return !!this.fallbackApiKey && this.fallbackApiKey !== this.apiKey;
   }
 
   /**
    * Calls Gemini models via Google GenAI REST API with retries for transient errors.
+   * If primary key fails with 429/503/transient conditions, uses fallback key if configured.
    */
   public async generateContent(params: {
     systemInstruction?: string;
@@ -38,9 +49,53 @@ export class GeminiService {
       parameters: Record<string, unknown>;
     }>;
   }): Promise<GeminiResponse> {
+    try {
+      return await this.requestWithKey(this.apiKey, params, false);
+    } catch (primaryErr) {
+      if (primaryErr instanceof GeminiApiError) {
+        // Only fallback on transient / quota / availability conditions
+        const isTransientQuota =
+          primaryErr.status === 429 ||
+          primaryErr.status === 503 ||
+          primaryErr.status === 502 ||
+          primaryErr.status === 504;
+
+        if (isTransientQuota && this.getHasFallbackKey()) {
+          // Log safe metadata only - never log API keys
+          console.warn(
+            `Primary Gemini request encountered HTTP ${primaryErr.status}. Switching to fallback API key.`
+          );
+          try {
+            return await this.requestWithKey(this.fallbackApiKey!, params, true);
+          } catch (fallbackErr) {
+            const fbMsg = fallbackErr instanceof Error ? this.redactor.redact(fallbackErr.message) : 'Unknown error';
+            throw new GeminiApiError(
+              `Gemini primary key failed with HTTP ${primaryErr.status} and fallback key failed: ${fbMsg}`,
+              fallbackErr instanceof GeminiApiError ? fallbackErr.status : 500
+            );
+          }
+        }
+      }
+      throw primaryErr;
+    }
+  }
+
+  private async requestWithKey(
+    apiKey: string,
+    params: {
+      systemInstruction?: string;
+      contents: GeminiContent[];
+      tools?: Array<{
+        name: string;
+        description: string;
+        parameters: Record<string, unknown>;
+      }>;
+    },
+    isFallback: boolean
+  ): Promise<GeminiResponse> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       this.model
-    )}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const payload: Record<string, unknown> = {
       contents: params.contents,
@@ -63,7 +118,8 @@ export class GeminiService {
       ];
     }
 
-    const maxRetries = 2;
+    // If this is primary and we have a fallback key, don't waste multiple retries on 429
+    const maxRetries = !isFallback && this.getHasFallbackKey() ? 0 : 2;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -81,7 +137,6 @@ export class GeminiService {
           const errText = await response.text();
           const redactedErr = this.redactor.redact(errText);
           if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
-            // Transient rate-limit or backend error, wait briefly and retry
             await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
             continue;
           }
@@ -113,18 +168,27 @@ export class GeminiService {
 
         for (const part of candidateParts) {
           if (part.functionCall) {
-            const thoughtSig = (part as any).thought_signature ||
-                               (part as any).thoughtSignature ||
-                               (part.functionCall as any).thought_signature ||
-                               (part.functionCall as any).thoughtSignature;
+            const thoughtSig =
+              (part as any).thought_signature ||
+              (part as any).thoughtSignature ||
+              (part.functionCall as any).thought_signature ||
+              (part.functionCall as any).thoughtSignature;
             toolCalls.push({
               name: part.functionCall.name,
               args: part.functionCall.args || {},
               part,
-              ...(thoughtSig ? {
-                thoughtSignature: (part as any).thoughtSignature || (part.functionCall as any).thoughtSignature || thoughtSig,
-                thought_signature: (part as any).thought_signature || (part.functionCall as any).thought_signature || thoughtSig,
-              } : {}),
+              ...(thoughtSig
+                ? {
+                    thoughtSignature:
+                      (part as any).thoughtSignature ||
+                      (part.functionCall as any).thoughtSignature ||
+                      thoughtSig,
+                    thought_signature:
+                      (part as any).thought_signature ||
+                      (part.functionCall as any).thought_signature ||
+                      thoughtSig,
+                  }
+                : {}),
             });
           }
           // Do not expose internal thoughts (thought: true) to Telegram output
@@ -141,12 +205,19 @@ export class GeminiService {
         };
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        if (attempt < maxRetries && !(err instanceof GeminiApiError && err.status < 500 && err.status !== 429)) {
+        if (
+          attempt < maxRetries &&
+          !(err instanceof GeminiApiError && err.status < 500 && err.status !== 429)
+        ) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
           continue;
         }
         break;
       }
+    }
+
+    if (lastError instanceof GeminiApiError) {
+      throw lastError;
     }
 
     const errorMsg = lastError ? this.redactor.redact(lastError.message) : 'Unknown Gemini error';

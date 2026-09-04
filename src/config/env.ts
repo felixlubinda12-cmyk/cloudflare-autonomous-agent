@@ -67,5 +67,17 @@ export function getAppConfig(env: Partial<Env>): AppConfig {
     logLevel,
     environment,
     adminSecret: env.ADMIN_SECRET ? env.ADMIN_SECRET.trim() : undefined,
+    geminiFallbackApiKey: (env.GEMINI_FALLBACK_API_KEY && env.GEMINI_FALLBACK_API_KEY.trim())
+      ? env.GEMINI_FALLBACK_API_KEY.trim()
+      : undefined,
+    githubToken: (env.GITHUB_TOKEN && env.GITHUB_TOKEN.trim())
+      ? env.GITHUB_TOKEN.trim()
+      : undefined,
+    githubOwner: (env.GITHUB_OWNER && env.GITHUB_OWNER.trim())
+      ? env.GITHUB_OWNER.trim()
+      : undefined,
+    githubRepository: (env.GITHUB_REPOSITORY && env.GITHUB_REPOSITORY.trim())
+      ? env.GITHUB_REPOSITORY.trim()
+      : undefined,
   };
 }

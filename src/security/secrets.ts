@@ -10,6 +10,9 @@ const SENSITIVE_PATTERNS = [
   /(?:api[_-]?token|api[_-]?key|secret[_-]?token)\s*[:=]\s*["']?([A-Za-z0-9_\-.]{8,})["']?/gi,
   /X-Telegram-Bot-Api-Secret-Token:\s*([^\r\n]+)/gi,
   /Authorization:\s*Bearer\s+([^\r\n]+)/gi,
+  /(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{30,}/gi,
+  /github_pat_[A-Za-z0-9_]{50,}/gi,
+  /token\s+([A-Za-z0-9_\-.]{20,})/gi,
 ];
 
 export class SecretRedactor {
@@ -50,8 +53,10 @@ export class SecretRedactor {
     redacted = redacted.replace(/Bearer\s+([A-Za-z0-9_\-.]{8,})/gi, 'Bearer [REDACTED_TOKEN]');
     redacted = redacted.replace(/bot([0-9]{8,12}:[A-Za-z0-9_-]{30,})/gi, 'bot[REDACTED_BOT_TOKEN]');
     redacted = redacted.replace(/(api[_-]?key=)([A-Za-z0-9_-]{10,})/gi, '$1[REDACTED_KEY]');
+    redacted = redacted.replace(/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{30,}/gi, '[REDACTED_GITHUB_TOKEN]');
+    redacted = redacted.replace(/github_pat_[A-Za-z0-9_]{50,}/gi, '[REDACTED_GITHUB_TOKEN]');
     redacted = redacted.replace(
-      /(["']?(?:api[_\-]?token|api[_\-]?key|webhook[_\-]?secret|bot[_\-]?token)["']?\s*[:=]\s*["'])([^"']{4,})(["'])/gi,
+      /(["']?(?:api[_\-]?token|api[_\-]?key|webhook[_\-]?secret|bot[_\-]?token|github[_\-]?token)["']?\s*[:=]\s*["'])([^"']{4,})(["'])/gi,
       '$1[REDACTED]$3'
     );
 

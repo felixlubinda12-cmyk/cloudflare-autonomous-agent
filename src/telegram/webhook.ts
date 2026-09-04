@@ -12,6 +12,7 @@ import { SessionService } from '../sessions/service.js';
 import { MemoryService } from '../memory/service.js';
 import { CloudflareService } from '../cloudflare/client.js';
 import { GeminiService } from '../gemini/client.js';
+import { GitHubService } from '../github/client.js';
 import { AgentService } from '../agent/agent.js';
 
 export async function handleTelegramWebhook(
@@ -22,9 +23,11 @@ export async function handleTelegramWebhook(
     (env.LOG_LEVEL?.toLowerCase() as any) || 'info',
     new SecretRedactor([
       env.GEMINI_API_KEY,
+      env.GEMINI_FALLBACK_API_KEY,
       env.CLOUDFLARE_API_TOKEN,
       env.TELEGRAM_BOT_TOKEN,
       env.TELEGRAM_WEBHOOK_SECRET,
+      env.GITHUB_TOKEN,
     ])
   );
 
@@ -127,13 +130,16 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
   "Show details for worker test-worker"
   "Create a worker called hello-api that returns Hello World"
   "Show my workers.dev subdomain"
-  "Remember that my default worker compatibility date is 2024-09-23"`;
+  "Remember that my default worker compatibility date is 2024-09-23"
+  "Inspect playground repository"
+  "List files in playground repo"
+  "Create a PR in playground repo"`;
     await telegram.sendMessage(chatId, welcome);
     return new Response('OK', { status: 200 });
   }
 
   if (lowerText === '/help') {
-    const help = `  *Cloudflare Autonomous Agent Commands & Capabilities*
+    const help = `*Cloudflare Autonomous Agent Commands & Capabilities*
 
 *Deterministic Commands:*
   /start - Welcome & intro
@@ -151,6 +157,14 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
   *Subdomain:* "What is my account's workers.dev subdomain?"
   *Deployments:* "Show deployment history for <name>"
 
+*GitHub Playground (Phase 2):*
+  *Inspect Repo:* "Show playground repository info"
+  *Files:* "Read file <path>" or "Create file <path> with content ..."
+  *Search:* "Search code for <keyword>"
+  *Commits & Branches:* "List commits" or "Create branch <name>"
+  *Pull Requests:* "Create a PR from <head> to <base>" or "List open PRs"
+  *Workflows:* "List workflows" or "Trigger workflow <name>" or "Show workflow run <id>"
+
 *Memory System:*
   "Remember that my project name is Acme API"
   "What memories do you have stored?"
@@ -164,19 +178,26 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
     const maskedAccount = config.cloudflareAccountId
       ? `${config.cloudflareAccountId.slice(0, 6)}...${config.cloudflareAccountId.slice(-4)}`
       : 'Not configured';
-    const statusMsg = `  *Agent Status (Phase 1)*
+    const githubRepoStatus = config.githubOwner && config.githubRepository
+      ? `${config.githubOwner}/${config.githubRepository}`
+      : 'Not configured';
+    const fallbackStatus = config.geminiFallbackApiKey ? 'Configured' : 'None';
 
-  *Runtime:* Cloudflare Worker
-  *Reasoning Engine:* ${config.geminiModel}
-  *Max Iterations:* ${config.agentMaxIterations}
-  *Account ID:* ${maskedAccount}
-  *Session ID:* \`${activeSession.id}\`
-  *Owner ID Configured:* ${config.telegramOwnerId ? 'Yes' : 'No'}
+    const statusMsg = `*Agent Status (Phase 2)*
 
-  *Bindings:*
-  - KV (AGENT_KV): Connected
-  - D1 (AGENT_DB): Connected
-  - R2 (AGENT_STORAGE): Connected`;
+*Runtime:* Cloudflare Worker
+*Reasoning Engine:* ${config.geminiModel}
+*Fallback Key:* ${fallbackStatus}
+*Max Iterations:* ${config.agentMaxIterations}
+*Account ID:* ${maskedAccount}
+*GitHub Playground:* \`${githubRepoStatus}\`
+*Session ID:* \`${activeSession.id}\`
+*Owner ID Configured:* ${config.telegramOwnerId ? 'Yes' : 'No'}
+
+*Bindings:*
+- KV (AGENT_KV): Connected
+- D1 (AGENT_DB): Connected
+- R2 (AGENT_STORAGE): Connected`;
     await telegram.sendMessage(chatId, statusMsg);
     return new Response('OK', { status: 200 });
   }
@@ -185,7 +206,7 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
     const newSession = await sessions.resetSession(userIdStr, chatIdStr);
     await telegram.sendMessage(
       chatId,
-      `  Session reset! Started a new conversation session (\`${newSession.id.slice(0, 8)}...\`). Stored long-term memories are preserved.`
+      `Session reset! Started a new conversation session (\`${newSession.id.slice(0, 8)}...\`). Stored long-term memories are preserved.`
     );
     return new Response('OK', { status: 200 });
   }
@@ -197,11 +218,22 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
     config.cloudflareApiToken,
     config.cloudflareAccountId
   );
-  const gemini = new GeminiService(config.geminiApiKey, config.geminiModel);
+  const gemini = new GeminiService(
+    config.geminiApiKey,
+    config.geminiModel,
+    undefined,
+    config.geminiFallbackApiKey
+  );
+  const github = new GitHubService(
+    config.githubToken,
+    config.githubOwner,
+    config.githubRepository
+  );
   const agent = new AgentService({
     sessions,
     memory,
     cloudflare,
+    github,
     gemini,
     kv,
     r2,

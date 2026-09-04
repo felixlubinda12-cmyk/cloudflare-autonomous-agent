@@ -19,6 +19,31 @@ import {
   listMemoriesTool,
   deleteMemoryTool,
 } from './memory/memory.js';
+import {
+  getRepositoryTool,
+  listContentsTool,
+  getFileTool,
+  searchCodeTool,
+  createOrUpdateFileTool,
+  deleteFileTool,
+  listCommitsTool,
+  getCommitTool,
+  listBranchesTool,
+  createBranchTool,
+} from './github/repository.js';
+import {
+  createPullRequestTool,
+  getPullRequestTool,
+  listPullRequestsTool,
+} from './github/pullRequests.js';
+import {
+  listWorkflowsTool,
+  getWorkflowTool,
+  triggerWorkflowTool,
+  listWorkflowRunsTool,
+  getWorkflowRunTool,
+  getWorkflowRunLogsTool,
+} from './github/actions.js';
 
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map();
@@ -37,6 +62,27 @@ export class ToolRegistry {
     this.register(searchMemoryTool);
     this.register(listMemoriesTool);
     this.register(deleteMemoryTool);
+
+    // Register Phase 2 GitHub Playground tools
+    this.register(getRepositoryTool);
+    this.register(listContentsTool);
+    this.register(getFileTool);
+    this.register(searchCodeTool);
+    this.register(createOrUpdateFileTool);
+    this.register(deleteFileTool);
+    this.register(listCommitsTool);
+    this.register(getCommitTool);
+    this.register(listBranchesTool);
+    this.register(createBranchTool);
+    this.register(createPullRequestTool);
+    this.register(getPullRequestTool);
+    this.register(listPullRequestsTool);
+    this.register(listWorkflowsTool);
+    this.register(getWorkflowTool);
+    this.register(triggerWorkflowTool);
+    this.register(listWorkflowRunsTool);
+    this.register(getWorkflowRunTool);
+    this.register(getWorkflowRunLogsTool);
   }
 
   public register(tool: ToolDefinition): void {

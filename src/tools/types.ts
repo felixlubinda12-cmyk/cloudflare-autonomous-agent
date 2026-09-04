@@ -3,6 +3,7 @@ import { MemoryService } from '../memory/service.js';
 import { SessionService } from '../sessions/service.js';
 import { R2Service } from '../storage/r2.js';
 import { KvService } from '../storage/kv.js';
+import { GitHubService } from '../github/client.js';
 
 export interface ToolExecutionContext {
   cloudflare: CloudflareService;
@@ -12,6 +13,7 @@ export interface ToolExecutionContext {
   kv: KvService;
   sessionId: string;
   runId?: string;
+  github?: GitHubService;
 }
 
 export interface ToolResult {

@@ -27,13 +27,23 @@ npx wrangler kv:namespace create AGENT_KV
 npx wrangler r2 bucket create agent-storage`,
     },
     {
-      title: '2. Configure Secret Keys via Wrangler',
-      desc: 'Set the sensitive keys securely as Cloudflare secrets (never commit them to git).',
-      code: `npx wrangler secret put GEMINI_API_KEY
+      title: '2. Configure Secret Keys & Playground Repo via Wrangler',
+      desc: 'Set sensitive credentials as encrypted Cloudflare secrets and configure playground target repository.',
+      code: `# Core Agent Secrets
+npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put CLOUDFLARE_API_TOKEN
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
-npx wrangler secret put TELEGRAM_OWNER_ID`,
+npx wrangler secret put TELEGRAM_OWNER_ID
+
+# Phase 2 Gemini Fallback Key (Optional but recommended)
+npx wrangler secret put GEMINI_FALLBACK_API_KEY
+
+# Phase 2 GitHub Playground Sandbox (Separate from agent repo)
+npx wrangler secret put GITHUB_TOKEN
+# Set playground repo owner & name (e.g., in wrangler.jsonc vars or wrangler secret)
+npx wrangler secret put GITHUB_OWNER
+npx wrangler secret put GITHUB_REPOSITORY`,
     },
     {
       title: '3. Deploy the Autonomous Agent Worker',
