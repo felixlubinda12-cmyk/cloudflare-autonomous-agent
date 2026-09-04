@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-autonomous-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "account_id": "7acc438ecf125d6eac5e140bcfb70d4f",
+  "kv_namespaces": [
+    {
+      "binding": "AGENT_KV",
+      "id": "7a6704e3410a4598afedf46cfcbdd8bd"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "AGENT_DB",
+      "database_name": "agent-db",
+      "database_id": "d0a8482d-8b54-401c-8e05-c85515b6033b",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AGENT_STORAGE",
+      "bucket_name": "agent-storage"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

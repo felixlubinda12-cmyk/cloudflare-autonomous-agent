@@ -1,0 +1,8 @@
+{
+  "name": "Cloudflare Autonomous Agent",
+  "description": "Cloudflare-native autonomous AI agent powered by Gemini, controlled via Telegram, running on Cloudflare Workers with KV, D1, and R2.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
