@@ -9,6 +9,7 @@ import {
   GitHubWorkflow,
   GitHubWorkflowRun,
   GitHubWorkflowJob,
+  AuthorizedRepoMetadata,
 } from './types.js';
 
 export class GitHubApiError extends Error {
@@ -48,44 +49,181 @@ function encodeBase64Utf8(str: string): string {
 
 export class GitHubService {
   private token: string;
-  private owner: string;
-  private repo: string;
+  private owner: string = '';
+  private repo: string = '';
+  private authenticatedUser: string = '';
+  private resolved: boolean = false;
   private redactor: SecretRedactor;
   private baseUrl = 'https://api.github.com';
 
   constructor(
     token?: string,
-    owner?: string,
+    redactorOrOwner?: SecretRedactor | string,
     repo?: string,
     redactor?: SecretRedactor
   ) {
     this.token = token?.trim() || '';
-    this.owner = owner?.trim() || '';
-    this.repo = repo?.trim() || '';
-    this.redactor = redactor || new SecretRedactor();
+    if (typeof redactorOrOwner === 'object' && redactorOrOwner instanceof SecretRedactor) {
+      this.redactor = redactorOrOwner;
+    } else if (typeof redactorOrOwner === 'string' && repo) {
+      this.owner = redactorOrOwner.trim();
+      this.repo = repo.trim();
+      this.resolved = !!(this.owner && this.repo);
+      this.redactor = redactor || new SecretRedactor();
+    } else {
+      this.redactor = redactor || new SecretRedactor();
+    }
+
     if (this.token) {
       this.redactor.addSecret(this.token);
     }
   }
 
   public isConfigured(): boolean {
-    return !!(this.token && this.owner && this.repo);
+    return !!this.token;
   }
 
   public getTargetRepository(): { owner: string; repo: string } {
     return { owner: this.owner, repo: this.repo };
   }
 
+  public getAuthenticatedUser(): string {
+    return this.authenticatedUser;
+  }
+
+  public hasResolvedRepository(): boolean {
+    return this.resolved && !!(this.owner && this.repo);
+  }
+
   private ensureConfigured(): void {
     if (!this.isConfigured()) {
       throw new GitHubApiError(
-        'GitHub playground repository is not configured. Please provide GITHUB_TOKEN, GITHUB_OWNER, and GITHUB_REPOSITORY.',
+        'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
         400
       );
     }
   }
 
+  /**
+   * Discovers and locks the single authorized repository accessible to the fine-grained PAT.
+   * Queries the GitHub API to list repositories accessible to the token.
+   * Strictly enforces that exactly ONE repository is accessible; otherwise halts and rejects.
+   */
+  public async resolveAuthorizedRepository(): Promise<AuthorizedRepoMetadata> {
+    this.ensureConfigured();
+
+    if (this.resolved && this.owner && this.repo) {
+      return {
+        owner: this.owner,
+        repo: this.repo,
+        fullName: `${this.owner}/${this.repo}`,
+      };
+    }
+
+    // 1. Check authenticated user identity (if /user endpoint is permitted for this token)
+    try {
+      const userRes = await this.rawRequest<any>('/user');
+      if (userRes && typeof userRes.login === 'string') {
+        this.authenticatedUser = userRes.login;
+      }
+    } catch {
+      // Fine-grained PATs with repository-only scopes may not grant user profile read.
+      // Identity will be derived from the authorized repository below.
+    }
+
+    // 2. Discover accessible repositories for the authenticated token
+    let repos: any[] = [];
+    try {
+      const data = await this.rawRequest<any>(
+        '/user/repos?per_page=100&affiliation=owner,collaborator,organization_member'
+      );
+      if (Array.isArray(data)) {
+        repos = data;
+      }
+    } catch (err: any) {
+      // Fallback: check installation repositories (if GitHub App / installation token)
+      try {
+        const installData = await this.rawRequest<any>('/installation/repositories?per_page=100');
+        if (installData && Array.isArray(installData.repositories)) {
+          repos = installData.repositories;
+        }
+      } catch {
+        throw err;
+      }
+    }
+
+    if (!Array.isArray(repos) || repos.length === 0) {
+      throw new GitHubSecurityError(
+        'No accessible repositories found for the provided GITHUB_TOKEN. Ensure the fine-grained PAT is granted repository access to the dedicated playground repository.'
+      );
+    }
+
+    if (repos.length > 1) {
+      const repoList = repos
+        .map((r: any) => r.full_name || `${r.owner?.login}/${r.name}`)
+        .join(', ');
+      throw new GitHubSecurityError(
+        `Security boundary violated: GITHUB_TOKEN has access to ${repos.length} repositories (${repoList}). For safe sandbox isolation, the fine-grained PAT must be restricted by GitHub to exactly ONE dedicated playground repository.`
+      );
+    }
+
+    const authorized = repos[0];
+    const repoOwner = authorized.owner?.login;
+    const repoName = authorized.name;
+
+    if (!repoOwner || !repoName) {
+      throw new GitHubSecurityError(
+        'Invalid repository metadata returned by GitHub API for the authorized token.'
+      );
+    }
+
+    this.owner = repoOwner;
+    this.repo = repoName;
+    if (!this.authenticatedUser) {
+      this.authenticatedUser = repoOwner;
+    }
+    this.resolved = true;
+
+    return {
+      owner: this.owner,
+      repo: this.repo,
+      fullName: `${this.owner}/${this.repo}`,
+      defaultBranch: authorized.default_branch,
+      isPrivate: authorized.private,
+    };
+  }
+
+  public async ensureAuthorizedRepository(): Promise<{ owner: string; repo: string }> {
+    this.ensureConfigured();
+    if (!this.resolved || !this.owner || !this.repo) {
+      await this.resolveAuthorizedRepository();
+    }
+    return { owner: this.owner, repo: this.repo };
+  }
+
+  public validateRepositoryAccess(targetOwner?: string, targetRepo?: string): void {
+    if (!this.resolved || !this.owner || !this.repo) {
+      return;
+    }
+    if (targetOwner && targetOwner.toLowerCase() !== this.owner.toLowerCase()) {
+      throw new GitHubSecurityError(
+        `Access denied: Target owner "${targetOwner}" does not match authorized repository owner "${this.owner}".`
+      );
+    }
+    if (targetRepo && targetRepo.toLowerCase() !== this.repo.toLowerCase()) {
+      throw new GitHubSecurityError(
+        `Access denied: Target repository "${targetRepo}" does not match authorized playground repository "${this.repo}".`
+      );
+    }
+  }
+
   private validatePath(path: string): string {
+    if (/^https?:\/\//i.test(path) || path.includes('github.com/')) {
+      throw new GitHubSecurityError(
+        'Absolute URLs and external repositories are prohibited. Path must be relative to the playground repository root.'
+      );
+    }
+
     const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
     const parts = normalized.split('/');
     for (const part of parts) {
@@ -98,7 +236,7 @@ export class GitHubService {
     return normalized;
   }
 
-  private async request<T>(
+  private async rawRequest<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -132,11 +270,20 @@ export class GitHubService {
     return (await res.json()) as T;
   }
 
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    await this.ensureAuthorizedRepository();
+    return this.rawRequest<T>(endpoint, options);
+  }
+
   // ==========================================
   // Repository Inspection & Search
   // ==========================================
 
   public async getRepository(): Promise<GitHubRepoMetadata> {
+    await this.ensureAuthorizedRepository();
     const data = await this.request<any>(
       `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(this.repo)}`
     );
@@ -162,6 +309,7 @@ export class GitHubService {
     path: string = '',
     ref?: string
   ): Promise<GitHubContentItem[]> {
+    await this.ensureAuthorizedRepository();
     const cleanPath = path ? this.validatePath(path) : '';
     let endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
@@ -185,6 +333,7 @@ export class GitHubService {
     path: string,
     ref?: string
   ): Promise<GitHubFileResult> {
+    await this.ensureAuthorizedRepository();
     const cleanPath = this.validatePath(path);
     let endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
@@ -228,7 +377,22 @@ export class GitHubService {
   public async searchCode(
     query: string
   ): Promise<{ totalCount: number; items: Array<{ name: string; path: string; sha: string }> }> {
-    const scopedQuery = `${query.trim()} repo:${this.owner}/${this.repo}`;
+    await this.ensureAuthorizedRepository();
+
+    // Security boundary: Prohibit model or prompt from searching external repositories
+    const repoMatch = query.match(/repo:([^\s]+)/i);
+    if (repoMatch) {
+      const requestedRepo = repoMatch[1].toLowerCase();
+      const authorizedRepo = `${this.owner}/${this.repo}`.toLowerCase();
+      if (requestedRepo !== authorizedRepo) {
+        throw new GitHubSecurityError(
+          `Access denied: Code search is restricted to the authorized playground repository "${this.owner}/${this.repo}". Search across "${repoMatch[1]}" is prohibited.`
+        );
+      }
+    }
+
+    const sanitizedQuery = query.replace(/repo:[^\s]+/gi, '').trim();
+    const scopedQuery = `${sanitizedQuery} repo:${this.owner}/${this.repo}`;
     const endpoint = `/search/code?q=${encodeURIComponent(scopedQuery)}`;
     const data = await this.request<any>(endpoint);
 
@@ -255,6 +419,7 @@ export class GitHubService {
     branch?: string;
     sha?: string;
   }): Promise<{ success: boolean; path: string; commitSha: string; contentSha: string }> {
+    await this.ensureAuthorizedRepository();
     const cleanPath = this.validatePath(params.path);
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
@@ -306,6 +471,7 @@ export class GitHubService {
     sha: string;
     branch?: string;
   }): Promise<{ success: boolean; path: string; commitSha: string }> {
+    await this.ensureAuthorizedRepository();
     const cleanPath = this.validatePath(params.path);
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
@@ -337,6 +503,7 @@ export class GitHubService {
     path?: string;
     limit?: number;
   }): Promise<GitHubCommitItem[]> {
+    await this.ensureAuthorizedRepository();
     let endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/commits?per_page=${params?.limit || 10}`;
@@ -363,6 +530,7 @@ export class GitHubService {
     date: string;
     files: Array<{ filename: string; status: string; additions: number; deletions: number }>;
   }> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/commits/${encodeURIComponent(ref)}`;
@@ -383,6 +551,7 @@ export class GitHubService {
   }
 
   public async listBranches(limit: number = 20): Promise<GitHubBranchItem[]> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/branches?per_page=${limit}`;
@@ -398,6 +567,7 @@ export class GitHubService {
     branchName: string,
     fromBranchOrSha?: string
   ): Promise<{ success: boolean; branch: string; sha: string }> {
+    await this.ensureAuthorizedRepository();
     const cleanBranch = branchName.replace(/^refs\/heads\//, '').trim();
     if (!cleanBranch) {
       throw new GitHubApiError('Branch name must not be empty.', 400);
@@ -451,6 +621,7 @@ export class GitHubService {
     base: string;
     body?: string;
   }): Promise<GitHubPullRequest> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/pulls`;
@@ -481,6 +652,7 @@ export class GitHubService {
   }
 
   public async getPullRequest(pullNumber: number): Promise<GitHubPullRequest> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/pulls/${pullNumber}`;
@@ -504,6 +676,7 @@ export class GitHubService {
     state?: 'open' | 'closed' | 'all';
     limit?: number;
   }): Promise<GitHubPullRequest[]> {
+    await this.ensureAuthorizedRepository();
     const state = params?.state || 'open';
     const limit = params?.limit || 10;
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
@@ -528,6 +701,7 @@ export class GitHubService {
   // ==========================================
 
   public async listWorkflows(): Promise<GitHubWorkflow[]> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/actions/workflows`;
@@ -544,6 +718,7 @@ export class GitHubService {
   public async getWorkflow(
     workflowIdOrFileName: string | number
   ): Promise<GitHubWorkflow> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/actions/workflows/${encodeURIComponent(String(workflowIdOrFileName))}`;
@@ -561,6 +736,7 @@ export class GitHubService {
     ref: string;
     inputs?: Record<string, unknown>;
   }): Promise<{ success: boolean; message: string; workflowId: string | number; ref: string }> {
+    await this.ensureAuthorizedRepository();
     const endpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/actions/workflows/${encodeURIComponent(String(params.workflowId))}/dispatches`;
@@ -588,6 +764,7 @@ export class GitHubService {
     status?: string;
     limit?: number;
   }): Promise<GitHubWorkflowRun[]> {
+    await this.ensureAuthorizedRepository();
     const limit = params?.limit || 10;
     let endpoint = params?.workflowId
       ? `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
@@ -624,6 +801,7 @@ export class GitHubService {
     run: GitHubWorkflowRun;
     jobs: GitHubWorkflowJob[];
   }> {
+    await this.ensureAuthorizedRepository();
     const runEndpoint = `/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(
       this.repo
     )}/actions/runs/${runId}`;

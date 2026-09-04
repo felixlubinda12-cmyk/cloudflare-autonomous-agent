@@ -395,6 +395,203 @@ describe('GitHub Playground Integration Suite', () => {
 
     const result = await registry.execute('github_get_repository', {}, unconfiguredContext);
     expect(result.success).toBe(false);
-    expect(result.error).toContain('GitHub playground repository is not configured');
+    expect(result.error).toContain('GitHub playground repository is not configured. Missing GITHUB_TOKEN.');
+  });
+
+  describe('Dynamic Authorized Repository Discovery & Security Controls', () => {
+    it('1. initializes GitHub using ONLY GITHUB_TOKEN and is configured', () => {
+      const service = new GitHubService(token);
+      expect(service.isConfigured()).toBe(true);
+      expect(service.hasResolvedRepository()).toBe(false);
+    });
+
+    it('2. correctly discovers authenticated identity and single authorized repository', async () => {
+      const service = new GitHubService(token);
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+        if (url.endsWith('/user')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ login: 'nimo-developer' }),
+          });
+        }
+        if (url.includes('/user/repos')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => [
+              {
+                name: 'dedicated-nimo-playground',
+                full_name: 'nimo-developer/dedicated-nimo-playground',
+                owner: { login: 'nimo-developer' },
+                default_branch: 'main',
+                private: true,
+              },
+            ],
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404, text: async () => 'Not found' });
+      }));
+
+      const discovered = await service.resolveAuthorizedRepository();
+      expect(discovered.owner).toBe('nimo-developer');
+      expect(discovered.repo).toBe('dedicated-nimo-playground');
+      expect(discovered.fullName).toBe('nimo-developer/dedicated-nimo-playground');
+      expect(service.getAuthenticatedUser()).toBe('nimo-developer');
+      expect(service.hasResolvedRepository()).toBe(true);
+      expect(service.getTargetRepository()).toEqual({
+        owner: 'nimo-developer',
+        repo: 'dedicated-nimo-playground',
+      });
+    });
+
+    it('3. safely handles fine-grained PATs when /user profile endpoint is not permitted', async () => {
+      const service = new GitHubService(token);
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+        if (url.endsWith('/user')) {
+          // Fine-grained token without user:read permission
+          return Promise.resolve({
+            ok: false,
+            status: 403,
+            text: async () => 'Resource not accessible by fine-grained token',
+          });
+        }
+        if (url.includes('/user/repos')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => [
+              {
+                name: 'fine-grained-sandbox',
+                full_name: 'org-isolated/fine-grained-sandbox',
+                owner: { login: 'org-isolated' },
+                default_branch: 'main',
+                private: true,
+              },
+            ],
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404, text: async () => 'Not found' });
+      }));
+
+      const discovered = await service.resolveAuthorizedRepository();
+      expect(discovered.owner).toBe('org-isolated');
+      expect(discovered.repo).toBe('fine-grained-sandbox');
+      expect(service.getAuthenticatedUser()).toBe('org-isolated');
+      expect(service.hasResolvedRepository()).toBe(true);
+    });
+
+    it('4. halts and throws security error if token has access to ZERO repositories', async () => {
+      const service = new GitHubService(token);
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+        if (url.endsWith('/user')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ login: 'test-user' }) });
+        }
+        if (url.includes('/user/repos')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+        }
+        return Promise.resolve({ ok: false, status: 404, text: async () => 'Not found' });
+      }));
+
+      await expect(service.resolveAuthorizedRepository()).rejects.toThrow(GitHubSecurityError);
+      await expect(service.resolveAuthorizedRepository()).rejects.toThrow(/No accessible repositories found/);
+    });
+
+    it('5. halts and throws security error if token has access to MULTIPLE repositories', async () => {
+      const service = new GitHubService(token);
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+        if (url.endsWith('/user')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ login: 'test-user' }) });
+        }
+        if (url.includes('/user/repos')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => [
+              { name: 'repo-one', full_name: 'test-user/repo-one', owner: { login: 'test-user' } },
+              { name: 'repo-two', full_name: 'test-user/repo-two', owner: { login: 'test-user' } },
+            ],
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404, text: async () => 'Not found' });
+      }));
+
+      await expect(service.resolveAuthorizedRepository()).rejects.toThrow(GitHubSecurityError);
+      await expect(service.resolveAuthorizedRepository()).rejects.toThrow(/Security boundary violated: GITHUB_TOKEN has access to 2 repositories/);
+    });
+
+    it('6. rejects attempts by the model to search external repositories using repo: filter', async () => {
+      const service = new GitHubService(token, 'auth-owner', 'auth-repo');
+
+      await expect(
+        service.searchCode('fetchToken repo:malicious/other-repo')
+      ).rejects.toThrow(GitHubSecurityError);
+      await expect(
+        service.searchCode('fetchToken repo:malicious/other-repo')
+      ).rejects.toThrow(/Access denied: Code search is restricted to the authorized playground repository/);
+    });
+
+    it('7. rejects attempts to override repository via validateRepositoryAccess', () => {
+      const service = new GitHubService(token, 'auth-owner', 'auth-repo');
+      expect(() => service.validateRepositoryAccess('attacker-owner', 'auth-repo')).toThrow(GitHubSecurityError);
+      expect(() => service.validateRepositoryAccess('auth-owner', 'attacker-repo')).toThrow(GitHubSecurityError);
+      expect(() => service.validateRepositoryAccess('auth-owner', 'auth-repo')).not.toThrow();
+    });
+
+    it('8. rejects external URLs and directory traversal attempts in file paths', async () => {
+      const service = new GitHubService(token, 'auth-owner', 'auth-repo');
+
+      await expect(service.getFile('https://github.com/other-org/other-repo/blob/main/secret.txt')).rejects.toThrow(
+        GitHubSecurityError
+      );
+      await expect(service.getFile('../../../etc/passwd')).rejects.toThrow(GitHubSecurityError);
+    });
+
+    it('9. automatically discovers authorized repository before executing operations when initialized with token only', async () => {
+      const service = new GitHubService(token);
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+        if (url.endsWith('/user')) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ login: 'auto-user' }) });
+        }
+        if (url.includes('/user/repos')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => [
+              {
+                name: 'auto-repo',
+                full_name: 'auto-user/auto-repo',
+                owner: { login: 'auto-user' },
+                default_branch: 'main',
+                private: true,
+              },
+            ],
+          });
+        }
+        if (url.includes('/repos/auto-user/auto-repo')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              name: 'auto-repo',
+              full_name: 'auto-user/auto-repo',
+              default_branch: 'main',
+              private: true,
+            }),
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404, text: async () => 'Not found' });
+      }));
+
+      const metadata = await service.getRepository();
+      expect(metadata.name).toBe('auto-repo');
+      expect(metadata.fullName).toBe('auto-user/auto-repo');
+      expect(service.getTargetRepository()).toEqual({ owner: 'auto-user', repo: 'auto-repo' });
+    });
   });
 });

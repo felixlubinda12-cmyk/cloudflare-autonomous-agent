@@ -13,7 +13,7 @@ export const getRepositoryTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -47,7 +47,7 @@ export const listContentsTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -84,7 +84,7 @@ export const getFileTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -117,7 +117,7 @@ export const searchCodeTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -165,7 +165,7 @@ export const createOrUpdateFileTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -214,7 +214,7 @@ export const deleteFileTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -257,7 +257,7 @@ export const listCommitsTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -293,7 +293,7 @@ export const getCommitTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -323,7 +323,7 @@ export const listBranchesTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -359,7 +359,7 @@ export const createBranchTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {

@@ -39,11 +39,9 @@ npx wrangler secret put TELEGRAM_OWNER_ID
 # Phase 2 Gemini Fallback Key (Optional but recommended)
 npx wrangler secret put GEMINI_FALLBACK_API_KEY
 
-# Phase 2 GitHub Playground Sandbox (Separate from agent repo)
-npx wrangler secret put GITHUB_TOKEN
-# Set playground repo owner & name (e.g., in wrangler.jsonc vars or wrangler secret)
-npx wrangler secret put GITHUB_OWNER
-npx wrangler secret put GITHUB_REPOSITORY`,
+# Phase 2 GitHub Playground Sandbox (Fine-grained PAT scoped to 1 repository)
+# Nimo automatically discovers the authorized playground repository from this token
+npx wrangler secret put GITHUB_TOKEN`,
     },
     {
       title: '3. Deploy the Autonomous Agent Worker',

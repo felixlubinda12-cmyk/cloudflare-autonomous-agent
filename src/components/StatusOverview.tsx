@@ -62,12 +62,12 @@ export const StatusOverview: React.FC = () => {
     },
     {
       name: 'GitHub Playground',
-      binding: 'GITHUB_TOKEN / REPO',
+      binding: 'GITHUB_TOKEN',
       icon: GitBranch,
       color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800',
       role: 'External Code Sandbox',
       status: 'Active',
-      detail: 'Isolated sandbox repository for code commits, branches, PR reviews, and GitHub Actions workflow dispatches.',
+      detail: 'Isolated sandbox repository for code commits, branches, PR reviews, and GitHub Actions CI. Authorized repo discovered directly from the fine-grained PAT.',
     },
     {
       name: 'Telegram Interface',

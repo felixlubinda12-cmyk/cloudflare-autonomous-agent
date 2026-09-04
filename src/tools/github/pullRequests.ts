@@ -31,7 +31,7 @@ export const createPullRequestTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -67,7 +67,7 @@ export const getPullRequestTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -105,7 +105,7 @@ export const listPullRequestsTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {

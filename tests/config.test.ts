@@ -50,4 +50,20 @@ describe('Configuration & Environment Validation', () => {
     expect(config.logLevel).toBe('debug');
     expect(config.telegramOwnerId).toBe('987654321');
   });
+
+  it('loads Phase 2 secrets requiring only GEMINI_FALLBACK_API_KEY and GITHUB_TOKEN', () => {
+    const config = getAppConfig({
+      GEMINI_API_KEY: 'primary-gemini-key',
+      CLOUDFLARE_API_TOKEN: 'cf-token',
+      TELEGRAM_BOT_TOKEN: 'bot-token',
+      TELEGRAM_WEBHOOK_SECRET: 'secret',
+      GEMINI_FALLBACK_API_KEY: 'secondary-gemini-key',
+      GITHUB_TOKEN: 'ghp_PlaygroundPatOnly123',
+    });
+    expect(config.geminiFallbackApiKey).toBe('secondary-gemini-key');
+    expect(config.githubToken).toBe('ghp_PlaygroundPatOnly123');
+    // Ensure legacy env variables are not present on config
+    expect((config as any).githubOwner).toBeUndefined();
+    expect((config as any).githubRepository).toBeUndefined();
+  });
 });

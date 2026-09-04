@@ -13,7 +13,7 @@ export const listWorkflowsTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -44,7 +44,7 @@ export const getWorkflowTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -83,7 +83,7 @@ export const triggerWorkflowTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -129,7 +129,7 @@ export const listWorkflowRunsTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -166,7 +166,7 @@ export const getWorkflowRunTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {
@@ -201,7 +201,7 @@ export const getWorkflowRunLogsTool: ToolDefinition = {
       return {
         success: false,
         error:
-          'GitHub playground repository is not configured. Missing GITHUB_TOKEN, GITHUB_OWNER, or GITHUB_REPOSITORY.',
+          'GitHub playground repository is not configured. Missing GITHUB_TOKEN.',
       };
     }
     try {

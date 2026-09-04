@@ -178,9 +178,16 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
     const maskedAccount = config.cloudflareAccountId
       ? `${config.cloudflareAccountId.slice(0, 6)}...${config.cloudflareAccountId.slice(-4)}`
       : 'Not configured';
-    const githubRepoStatus = config.githubOwner && config.githubRepository
-      ? `${config.githubOwner}/${config.githubRepository}`
-      : 'Not configured';
+    let githubRepoStatus = 'Not configured';
+    if (config.githubToken) {
+      try {
+        const gh = new GitHubService(config.githubToken);
+        const resolved = await gh.resolveAuthorizedRepository();
+        githubRepoStatus = resolved.fullName;
+      } catch (err: any) {
+        githubRepoStatus = `Configured (${err.message || String(err)})`;
+      }
+    }
     const fallbackStatus = config.geminiFallbackApiKey ? 'Configured' : 'None';
 
     const statusMsg = `*Agent Status (Phase 2)*
@@ -225,9 +232,7 @@ I am your persistent AI agent running on Cloudflare Workers, with memory in D1, 
     config.geminiFallbackApiKey
   );
   const github = new GitHubService(
-    config.githubToken,
-    config.githubOwner,
-    config.githubRepository
+    config.githubToken
   );
   const agent = new AgentService({
     sessions,

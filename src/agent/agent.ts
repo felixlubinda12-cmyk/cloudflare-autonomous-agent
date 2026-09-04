@@ -50,9 +50,10 @@ export class AgentService {
 
     this.tools = new ToolRegistry();
     const maxIterations = params.maxIterations || 8;
-    const targetRepo = params.github?.isConfigured()
-      ? `${params.github.getTargetRepository().owner}/${params.github.getTargetRepository().repo}`
-      : undefined;
+    const targetRepo =
+      params.github?.isConfigured() && params.github.hasResolvedRepository()
+        ? `${params.github.getTargetRepository().owner}/${params.github.getTargetRepository().repo}`
+        : undefined;
 
     this.contextBuilder = new ContextBuilder(
       this.sessions,
@@ -85,7 +86,21 @@ export class AgentService {
     // 1. Persist user message to D1
     await this.sessions.addMessage(session.id, 'user', trimmed);
 
-    // 2. Build context
+    // 2. Resolve authorized GitHub playground repository if configured
+    if (this.github && this.github.isConfigured()) {
+      try {
+        const repoInfo = await this.github.ensureAuthorizedRepository();
+        this.contextBuilder.setTargetRepository(
+          `${repoInfo.owner}/${repoInfo.repo}`
+        );
+      } catch (err: any) {
+        this.logger.warn('Could not auto-discover authorized GitHub playground repository', {
+          error: err.message || String(err),
+        });
+      }
+    }
+
+    // 3. Build context
     const context = await this.contextBuilder.build(session.id, trimmed);
 
     // 3. Prepare tool execution context

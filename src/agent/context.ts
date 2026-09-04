@@ -29,6 +29,10 @@ export class ContextBuilder {
     this.githubRepo = githubRepo;
   }
 
+  public setTargetRepository(githubRepo?: string): void {
+    this.githubRepo = githubRepo;
+  }
+
   /**
    * Assembles the complete context for a user turn.
    */

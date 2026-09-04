@@ -87,3 +87,12 @@ export interface GitHubWorkflowJob {
   conclusion: string | null;
   steps?: GitHubWorkflowJobStep[];
 }
+
+export interface AuthorizedRepoMetadata {
+  owner: string;
+  repo: string;
+  fullName: string;
+  defaultBranch?: string;
+  isPrivate?: boolean;
+}
+
